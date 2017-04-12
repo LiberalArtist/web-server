@@ -1,9 +1,25 @@
-#lang racket/base
+#lang web-server/base
 (require racket/list
          racket/contract
-         racket/function
          web-server/http
          web-server/private/xexpr)
+
+(provide xexpr-forest/c
+         formlet*/c
+         formlet/c
+         pure
+         cross
+         cross*
+         xml-forest
+         xml
+         text
+         tag-xexpr
+         formlet-display
+         formlet-process
+         )
+
+(define (const x)
+  (λ _ x))
 
 ; Combinators
 (define (id x) x)
@@ -76,9 +92,10 @@
                     ((listof binding?) . -> . c)
                     integer?)))
 (define formlet*/c (formlet/c* any))
-(define (formlet/c . c)
-  (formlet/c* (apply values (map (curry coerce-contract 'formlet/c) c))))
+(define (formlet/c . cs)
+  (formlet/c* (apply values (map (λ (c) coerce-contract 'formlet/c c) cs))))
 
+#|
 (define alpha any/c)
 (define beta any/c)
 
@@ -98,3 +115,4 @@
  [tag-xexpr (symbol? (listof (list/c symbol? string?)) (formlet/c alpha) . -> . (formlet/c alpha))]
  [formlet-display ((formlet/c alpha) . -> . xexpr-forest/c)]
  [formlet-process (formlet*/c request? . -> . any)])
+|#

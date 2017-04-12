@@ -1,4 +1,4 @@
-#lang racket/base
+#lang web-server/base
 (require racket/contract
          racket/list
          web-server/http
@@ -8,6 +8,38 @@
                   formlet/c
                   pure
                   cross))
+
+(provide make-input*
+         make-input
+         ;;
+         input
+         text-input
+         password-input
+         checkbox
+         radio
+         radio-group
+         checkbox-group
+         submit
+         reset
+         file-upload
+         hidden
+         img
+         button
+         multiselect-input
+         select-input
+         textarea-input
+         ;;
+         required
+         default
+         to-string
+         to-number
+         to-symbol
+         to-boolean
+         ;;
+         input-string
+         input-int
+         input-symbol
+         )
 
 ;; Convert UTF-8 bytes to string when needed.
 (define (coerce-string/utf-8 bstr-or-str)
@@ -55,13 +87,13 @@
      (if (binding:form? bf)
          (binding:form-value bf)
          default))))
-
+#|
 (provide/contract
  [make-input* ((string? . -> . pretty-xexpr/c) . -> . (formlet/c (listof binding?)))]
  [make-input ((string? . -> . pretty-xexpr/c) . -> . (formlet/c (or/c false/c binding?)))]
  #;[binding:form-required (formlet/c (binding? . -> . bytes?))]
  #;[binding:form/default (bytes? . -> . (formlet/c (binding? . -> . bytes?)))])
-
+|#
 ; HTML Spec
 (define (input
          #:type [type "text"]
@@ -319,7 +351,7 @@
                                  (and cols (list 'cols (number->string cols)))))
                    attrs))
            (if value (coerce-string/utf-8 value) "")))))
-
+#|
 (provide/contract
  [input (()
          (#:type string?
@@ -422,7 +454,7 @@
                    #:cols number?)
                   . ->* .
                   (formlet/c (or/c false/c binding?)))])
-
+|#
 ; High-level
 (define (required f)
   (cross binding:form-required f))
@@ -444,7 +476,7 @@
           (lambda (b)
             (bytes=? b #"on")))
          f))
-
+#|
 (provide/contract
  [required ((formlet/c (or/c false/c binding?)) . -> . (formlet/c bytes?))]
  [default (bytes? (formlet/c (or/c false/c binding?)) . -> . (formlet/c bytes?))]
@@ -452,13 +484,14 @@
  [to-number ((formlet/c string?) . -> . (formlet/c number?))]
  [to-symbol ((formlet/c string?) . -> . (formlet/c symbol?))]
  [to-boolean ((formlet/c bytes?) . -> . (formlet/c boolean?))])
-
+|#
 ; OLD
 (define input-string (to-string (required (text-input))))
 (define input-int (to-number input-string))
 (define input-symbol (to-symbol input-string))
-
+#|
 (provide/contract
  [input-string (formlet/c string?)]
  [input-int (formlet/c integer?)]
  [input-symbol (formlet/c symbol?)])
+|#
