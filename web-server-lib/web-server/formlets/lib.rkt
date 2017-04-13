@@ -3,8 +3,9 @@
          racket/contract
          "private-guards.rkt"
          web-server/http
-         web-server/private/xexpr)
+         xml/xexpr)
 
+;better to modify web-server/private/xexpr to make pretty-xexpr/c flat
 
 (provide xexpr-forest/c
          formlet*/c
@@ -85,9 +86,9 @@
 
 (define (xml x)
   #;(-> pretty-xexpr/c any)
-  (unless (pretty-xexpr/c x)
+  (unless (xexpr/c x)
     (raise-argument-error 'xml
-                          "pretty-xexpr/c"
+                          "xexpr/c"
                           x))
   (xml-forest (list x)))
 
@@ -143,7 +144,7 @@
 
 ; Contracts
 (define xexpr-forest/c
-  (listof pretty-xexpr/c))
+  (listof xexpr/c))
 
 (define-syntax-rule (formlet/c* c)
   (integer? . -> . 

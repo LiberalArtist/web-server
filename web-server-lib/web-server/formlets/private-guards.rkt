@@ -1,7 +1,7 @@
 #lang web-server/base
 
 (require web-server/http
-         web-server/private/xexpr
+         xml/xexpr
          racket/match
          racket/contract
          (only-in racket/function arity=?)
@@ -25,7 +25,7 @@
     (unless (integer? i)
       (raise-argument-error (object-name formlet) "integer?" i))
     (match (call-with-values (λ () (formlet i)) list)
-      [(list (and xs (? (listof pretty-xexpr/c)))
+      [(list (and xs (? (listof xexpr/c)))
              (and p (? (λ (p)
                          (and (procedure? p)
                               (procedure-arity-includes? p 1)))))
@@ -78,7 +78,7 @@
                              "(formlet/c (unconstrained-domain-> any/c))"
                              formlet))
      (define rslt-arity
-       (procedure-result-arity rslt-arity))
+       (procedure-result-arity p-rslt))
      (cond
        [rslt-arity
         (unless (arity=? 1 rslt-arity)
