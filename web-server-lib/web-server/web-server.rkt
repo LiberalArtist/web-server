@@ -65,6 +65,7 @@
 (define (make-ssl-connect@ server-cert-file server-key-file)
   (define the-ctxt
     (ssl-make-server-context))
+  (ssl-server-context-use-server-cipher-preference! the-ctxt)
   (ssl-load-certificate-chain! the-ctxt server-cert-file)
   (ssl-load-private-key! the-ctxt server-key-file)
   (define-unit ssl:dispatch-server-connect@
