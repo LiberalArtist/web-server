@@ -1,32 +1,34 @@
 #lang racket/base
-(require racket/list
-         racket/match
+(require racket/match
          racket/stxparam
          net/url
-         web-server/dispatchers/dispatch
-         web-server/dispatch/http-expanders
-         web-server/dispatch/bidi-match
+         (only-in web-server/dispatchers/dispatch
+                  next-dispatcher)
+         "bidi-match.rkt"
+         syntax/parse/define
          (for-syntax racket/base
-                     syntax/parse
-                     web-server/dispatch/pattern))
+                     "exptime.rkt"))
+
+(provide dispatch-case
+         dispatch-url
+         dispatch-applies
+         dispatch-rules
+         dispatch-rules+applies)
+
+;; TODO:
+;;   - should rhs functions be let-bound?
 
 (module+ test
   (require rackunit))
 
-(define (default-else req)
-  (next-dispatcher))
-
-(begin-for-syntax
-  (define default-method #'(or #f "get")))
-
 (define (string-list->url strlist)
   (url->string
    (make-url #f #f #f #f #t
-             (if (empty? strlist)
-               (list (make-path/param "" empty))
-               (map (lambda (s) (make-path/param s empty))
-                    strlist))
-             empty #f)))
+             (if (null? strlist)
+                 (list (path/param "" null))
+                 (map (lambda (s) (path/param s null))
+                      strlist))
+             null #f)))
 
 (module+ test
   (check-equal? (string-list->url (list))
@@ -44,173 +46,66 @@
   (check-equal? (string-list->url (list "baked" "beans"))
                 "/baked/beans"))
 
-(define-syntax (dispatch-case stx)
-  (syntax-parse
-      stx #:literals (else)
-      [(_ [(path-pat ...)
-           (~optional (~seq #:method method)
-                      #:defaults ([method default-method]))
-           fun]
-          ...
-          [else else-fun])
-       #:fail-unless 
-       (for-each dispatch-pattern?
-                 (syntax->list #'((path-pat ...) ...)))
-       "Not a dispatch pattern"
-       (with-syntax
-           ([((path-pat/id ...) ...)
-             (map dispatch-pattern->dispatch-pattern/ids
-                  (syntax->list #'((path-pat ...) ...)))])
-         (with-syntax
-             ([((path-pat-id ...) ...)
-               (map (lambda (pp/is)
-                      (map (lambda (bs)
-                             (with-syntax ([(bidi-id arg ... id) bs])
-                               #'id))
-                           (filter (lambda (pp/i)
-                                     (syntax-case pp/i ()
-                                       [(bidi-id arg ... id) #t]
-                                       [_ #f]))
-                                   (syntax->list pp/is))))
-                    (syntax->list #'((path-pat/id ...) ...)))])
-           (syntax/loc stx
-             (lambda (the-req)
-               (syntax-parameterize ([bidi-match-going-in? #t])
-                 (match the-req
-                   [(request/url method (url/paths path-pat/id ...))
-                    (fun the-req path-pat-id ...)]
-                   ...
-                   [_ (else-fun the-req)]))))))]
-      [(dc [(path-pat ...) 
-            (~optional (~seq #:method method)
-                      #:defaults ([method default-method]))
-            fun]
-           ...)
-       (syntax/loc stx
-         (dc [(path-pat ...)
-              #:method method 
-              fun]
-             ...
-             [else default-else]))]))
+(begin-for-syntax
+  (define-syntax-class else-clause
+    #:description "else clause"
+    #:attributes [else-fun]
+    #:literals [else]
+    (pattern [else else-fun:expr])))
 
-(define-syntax (dispatch-url stx)
-  (syntax-parse
-      stx
-    [(_ [(path-pat ...) fun]
-        ...)
-     (for-each dispatch-pattern?
-               (syntax->list #'((path-pat ...) ...)))
-     (with-syntax
-         ([((path-pat/id ...) ...)
-           (map dispatch-pattern->dispatch-pattern/ids
-                (syntax->list #'((path-pat ...) ...)))])
-       (with-syntax
-           ([((from-path-pat ...) ...)
-             (map (lambda (pp/is-pre)
-                    (define pp/is 
-                      (datum->syntax pp/is-pre
-                                     (filter (compose not string-syntax?) (syntax->list pp/is-pre))
-                                     pp/is-pre))
-                    (for/list ([pp/i (dispatch-pattern-not-... pp/is)]
-                               [next-...? (dispatch-pattern-next-...? pp/is)])
-                      (with-syntax ([pp pp/i]
-                                    [(bidi-id arg ... id) pp/i])
-                        (if next-...?
-                          (syntax/loc pp/i (list pp (... ...)))
-                          pp/i))))
-                  (syntax->list #'((path-pat/id ...) ...)))]
-            [((from-body ...) ...)
-             (map (lambda (pp/is)
-                    (for/list ([pp/i (dispatch-pattern-not-... pp/is)]
-                               [next-...? (dispatch-pattern-next-...? pp/is)])
-                      (with-syntax ([pp pp/i])
-                        (if (string-syntax? pp/i)
-                          (syntax/loc pp/i (list pp))
-                          (with-syntax ([(bidi-id arg ... id) pp/i])
-                            (if next-...?
-                              (syntax/loc pp/i id)
-                              (syntax/loc pp/i (list id))))))))
-                  (syntax->list #'((path-pat/id ...) ...)))])
-         (syntax/loc stx
-           (syntax-parameterize ([bidi-match-going-in? #f])
-             (match-lambda*
-              [(list (? (lambda (x) (eq? x fun))) from-path-pat ...)
-               (string-list->url (append from-body ...))]
-              ...)))))]))
+(define-syntax-parser dispatch-case
+  #:track-literals
+  [(_ :dispatch-clause ...
+      (~optional :else-clause))
+   (syntax/loc this-syntax
+     (λ (the-req)
+       (syntax-parameterize ([bidi-match-going-in? #t])
+         (match the-req
+           [request-pat
+            (rhs the-req arg-going-in-id ...)]
+           ...
+           [_ (~? (else-fun the-req)
+                  (next-dispatcher))]))))])
 
-(define-syntax (dispatch-rules stx)
-  (syntax-parse
-      stx #:literals (else)
-      [(_ [(path-pat ...)
-           (~optional (~seq #:method method)
-                      #:defaults ([method default-method]))
-           fun]
-          ...
-          [else else-fun])
-       (for-each dispatch-pattern?
-                 (syntax->list #'((path-pat ...) ...)))
-       (syntax/loc stx
-         (values
-          (dispatch-case [(path-pat ...)
-                          #:method method
-                          fun]
-                         ...
-                         [else else-fun])
-          (dispatch-url [(path-pat ...) fun]
-                        ...)))]
-      [(dr [(path-pat ...)
-            (~optional (~seq #:method method)
-                       #:defaults ([method default-method]))
-            fun]
-           ...)
-       (syntax/loc stx
-         (dr [(path-pat ...)
-              #:method method
-              fun]
-             ...
-             [else default-else]))]))
+(define-syntax-parser dispatch-url
+  ;; CHANGED to allow (but ignore) #:method
+  #:track-literals
+  [(_ :dispatch-clause ...)
+   ;; n.b. does not accept else-clause
+   (syntax/loc this-syntax
+     (syntax-parameterize ([bidi-match-going-in? #f])
+       (match-lambda*
+         [(list (? (λ (x) (eq? x rhs))) arg-going-out-pat ...)
+          (string-list->url string-list-expr)]
+         ...)))])
 
-(define (dispatch-succ . _) #t)
-(define (dispatch-fail . _) #f)
+(define-syntax-parser dispatch-applies
+  #:track-literals
+  [(_ :dispatch-clause ... :else-clause)
+   (syntax/loc this-syntax
+     (λ (req) #t))]
+  [(_ :dispatch-clause ...)
+   (syntax/loc this-syntax
+     (syntax-parameterize ([bidi-match-going-in? #t])
+       (match-lambda
+         [request-pat #t] ...
+         [_ #f])))])
 
-(define-syntax (dispatch-rules+applies stx)
-  (syntax-parse
-      stx #:literals (else)
-      [(_
-        [pat
-         (~optional (~seq #:method method)
-                    #:defaults ([method default-method]))
-         fun]
-        ...
-        [else else-fun])
-       (syntax/loc stx
-         (let-values ([(dispatch url)
-                       (dispatch-rules
-                        [pat #:method method fun]
-                        ...
-                        [else else-fun])]
-                      [(applies?)
-                       (λ (req) #t)])
-           (values dispatch url applies?)))]
-      [(_
-        [pat
-         (~optional (~seq #:method method)
-                    #:defaults ([method default-method]))
-         fun]
-        ...)
-       (syntax/loc stx
-         (let-values ([(dispatch url)
-                       (dispatch-rules
-                        [pat #:method method fun]
-                        ...)]
-                      [(applies?)
-                       (dispatch-case
-                        [pat #:method method dispatch-succ]
-                        ...
-                        [else dispatch-fail])])
-           (values dispatch url applies?)))]))
+(define-syntax-parser dispatch-rules
+  #:track-literals
+  [(_ clause:dispatch-clause ...
+      (~optional the-else:else-clause))
+   (syntax/loc this-syntax
+     (values
+      (dispatch-case clause ... (~? the-else))
+      (dispatch-url clause ...)))])
 
-(provide dispatch-case
-         dispatch-url
-         dispatch-rules
-         dispatch-rules+applies)
+(define-syntax-parser dispatch-rules+applies
+  #:track-literals
+  [(_ clause:dispatch-clause ...
+      (~optional the-else:else-clause))
+   (syntax/loc this-syntax
+     (values
+      (dispatch-case clause ... (~? the-else))
+      (dispatch-url clause ...)
+      (dispatch-applies clause ... (~? the-else))))])

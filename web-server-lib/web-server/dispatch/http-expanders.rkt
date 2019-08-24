@@ -1,19 +1,24 @@
 #lang racket/base
 (require racket/match
          net/url
-         web-server/http)
+         web-server/http
+         syntax/parse/define
+         (for-syntax racket/base))
+
+(provide url/path
+         url/paths
+         request/url)
 
 (define-match-expander url/path
-  (syntax-rules ()
-    [(_ path-pat)
+  (syntax-parser
+    [(_ path-pat:expr)
      ; url = scheme, user, host, port, absolute?, path, query, fragment
-     (struct url (_ _ _ _ _ path-pat _ _))]))
+     #'(url _ _ _ _ _ path-pat _ _)]))
 
 (define-match-expander url/paths
-  (syntax-rules ()
-    [(_ path-pat ...)
-     (url/path (app (lambda (ps) (map path/param-path ps))
-                   (list path-pat ...)))]))
+  (syntax-parser
+    [(_ path-elem-pat:expr ...)
+     #'(url/path (list (path/param path-elem-pat _) ...))]))
 
 (define (method-downcase x)
   (cond
@@ -25,15 +30,11 @@
      x]))
 
 (define-match-expander request/url
-  (syntax-rules ()
-    [(_ url-pat)
+  (syntax-parser
+    [(_ url-pat:expr)
      ; req = method, url, headers, bindings, post-data, host-ip, host-port, client-ip
-     (request/url (or #f "get") url-pat)]
-    [(_ method url-pat)
+     #'(request/url (or #f "get") url-pat)]
+    [(_ method-pat:expr url-pat)
      ; req = method, url, headers, bindings, post-data, host-ip, host-port, client-ip
-     (struct request ((app method-downcase method)
-                      url-pat _ _ _ _ _ _))]))
-
-(provide url/path
-         url/paths
-         request/url)
+     #'(request (app method-downcase method-pat)
+                url-pat _ _ _ _ _ _)]))

@@ -1,7 +1,15 @@
 #lang racket/base
 (require racket/match
-         web-server/dispatch/coercion
-         web-server/dispatch/bidi-match)
+         "coercion.rkt"
+         "bidi-match.rkt"
+         syntax/parse/define
+         (for-syntax racket/base))
+
+(provide number-arg
+         integer-arg
+         real-arg
+         string-arg
+         symbol-arg)
 
 (define-syntax define-bidi-match-expander/coercions
   (syntax-rules ()
@@ -11,37 +19,37 @@
             (define-bidi-match-expander id in/m out/m))]))
 
 ; number arg
-(define string->number? (make-coerce-safe? string->number))
-(define-bidi-match-expander/coercions number-arg
-  string->number? string->number
+(define-try-match-expander number-arg/in
+  ; string->number already returns #f on failure
+  string? string->number)
+(define-coercion-match-expander number-arg/out
   number? number->string)
+(define-bidi-match-expander number-arg
+  number-arg/in number-arg/out)
 
 ; integer arg
-(define (string->integer x)
-  (define nx (string->number x))
-  (if (integer? nx)
-      nx
-      (error 'string->integer "Not an integer string")))
-(define string->integer? (make-coerce-safe? string->integer))
-(define-bidi-match-expander/coercions integer-arg
-  string->integer? string->integer
+(define-try-match-expander integer-arg/in
+  ; let match's optimizer see duplicate app and ? patterns
+  string? string->number #:check (? integer?))
+(define-coercion-match-expander integer-arg/out
   integer? number->string)
+(define-bidi-match-expander integer-arg
+  integer-arg/in integer-arg/out)
 
 ; real arg
-(define (string->real x)
-  (define nx (string->number x))
-  (if (real? nx)
-      nx
-      (error 'string->real "Not an real string")))
-(define string->real? (make-coerce-safe? string->real))
-(define-bidi-match-expander/coercions real-arg
-  string->real? string->real
+(define-try-match-expander real-arg/in
+  ; let match's optimizer see duplicate app and ? patterns
+  string? string->number #:check (? real?))
+(define-coercion-match-expander real-arg/out
   real? number->string)
+(define-bidi-match-expander real-arg
+  real-arg/in real-arg/out)
 
 ; string arg
 (define-match-expander string->string/m
-  (syntax-rules ()
-    [(_ str) (? string? str)]))
+  (syntax-parser
+    [(_ pat:expr)
+     #'(? string? pat)]))
 
 (define-bidi-match-expander string-arg string->string/m string->string/m)
 
@@ -49,9 +57,3 @@
 (define-bidi-match-expander/coercions symbol-arg
   string? string->symbol
   symbol? symbol->string)
-
-(provide number-arg
-         integer-arg
-         real-arg
-         string-arg
-         symbol-arg)
