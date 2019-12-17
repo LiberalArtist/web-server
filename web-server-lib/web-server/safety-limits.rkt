@@ -62,19 +62,21 @@
             #'(-safety-limits field ...)]))
        (module+ private
          (provide safety-limits accessor ...)))])
-                           
+
 
 (define-safety-limits/private-submodule
   max-waiting exact-nonnegative-integer? 511 #:unlimited 511 ;; contract from tcp-listen
-  initial-connection-timeout timeout/c 60
   request-read-timeout timeout/c 60
   max-request-line-length nonnegative-length/c (* 8 1024)
   max-request-headers nonnegative-length/c 100
   max-request-header-length nonnegative-length/c (* 8 1024)
   max-request-body-length nonnegative-length/c (* 1 1024 1024)
-  max-request-files nonnegative-length/c 100
-  max-request-file-length nonnegative-length/c (* 10 1024 1024)
-  request-file-memory-threshold nonnegative-length/c (* 1 1024 1024)
+  max-form-data-fields nonnegative-length/c 100
+  max-form-data-field-length nonnegative-length/c (* 8 1024)
+  max-form-data-files nonnegative-length/c 100
+  max-form-data-file-length nonnegative-length/c (* 10 1024 1024)
+  form-data-file-memory-threshold nonnegative-length/c (* 1 1024 1024)
+  max-form-data-parts nonnegative-length/c (+ max-form-data-fields max-form-data-files)
   response-timeout timeout/c 60
   response-send-timeout timeout/c 60)
 

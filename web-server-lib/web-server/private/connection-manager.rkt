@@ -35,7 +35,7 @@
             [reset-connection-response-send-timeout!
              (-> connection? any)])))
 
-(struct connection-manager (i tm initial-connection-timeout response-send-timeout))
+(struct connection-manager (i tm initial-timeout response-send-timeout))
 
 ;; The connection type is public.
 ;; We actually use the private connection* subtype,
@@ -50,7 +50,7 @@
 (define (start-connection-manager #:safety-limits [limits (make-unlimited-safety-limits)])
   (connection-manager (box 0)
                       (start-timer-manager)
-                      (safety-limits-initial-connection-timeout limits)
+                      (safety-limits-request-read-timeout limits)
                       (safety-limits-response-send-timeout limits)))
 
 ;; new-connection: connection-manager [number] i-port o-port custodian -> connection
@@ -60,7 +60,7 @@
     [(cm i-port o-port cust close?)
      (new-connection cm #f i-port o-port cust close?)]
     [(cm time-to-live i-port o-port cust close?)
-     (match-define (connection-manager i tm initial-connection-timeout response-send-timeout)
+     (match-define (connection-manager i tm initial-timeout response-send-timeout)
        cm)
      (define conn
        (connection*
@@ -72,7 +72,7 @@
      (set-connection-timer!
       conn
       (start-timer tm
-                   (or time-to-live initial-connection-timeout)
+                   (or time-to-live initial-timeout)
                    (lambda ()
                      (cond
                        [(weak-box-value conn-wb)

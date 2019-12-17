@@ -42,7 +42,7 @@
    (define-values-for-export [safety-limits]
      (make-safety-limits
       #:max-waiting max-waiting
-      #:initial-connection-timeout initial-connection-timeout))))
+      #:request-read-timeout initial-connection-timeout))))
 
 (provide
  dispatch-server^
