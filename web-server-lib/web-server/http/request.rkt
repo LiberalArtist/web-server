@@ -223,6 +223,11 @@
 (define (read-http-line/limited #:limit limit
                                 [in (current-input-port)]
                                 [bufsize 128])
+  ;; FIXME: this appears to busy-wait until bytes become available.
+  ;; Instead, we should probably yield to Racket's thread scheduler
+  ;; until we can make some progress (as the old implementation did),
+  ;; likely taking advantage of the fix to `peek-bytes-evt`
+  ;; in <https://github.com/racket/racket/commit/c19b944>.
   (define buf (make-bytes bufsize))
   (define-values (line-len suffix-len)
     (let loop ([offset 0]
