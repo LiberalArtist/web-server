@@ -350,7 +350,7 @@
        (let loop ()
          ;; Every time the limited-input is read from, reset
          ;; the connection timeout and give the client another
-         ;; (current-send-timeout) seconds' worth of lease.
+         ;; `response-send-timeout` seconds' worth of lease.
          (sync (port-progress-evt limited-input))
          (unless (port-closed? limited-input)
            (reset-connection-response-send-timeout! conn)

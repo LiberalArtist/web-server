@@ -38,9 +38,16 @@
 (provide
  (contract-out
   ;; CAUTION: To maximize backwards compatibility for low-level
-  ;; programs, `make-read-request` uses `make-unlimited-safety-limits`
-  ;; if the `#:safety-limits` argument is not given.
-  ;;  which leaves applications vulnerable.
+  ;; programs, `make-read-request` and `read-request`
+  ;; use `(make-unlimited-safety-limits)`
+  ;; if the `#:safety-limits` argument is not given,
+  ;; which leaves applications vulnerable.
+  ;; Generally, you should use `make-read-request` with
+  ;; an explicit `#:safety-limits` argument.
+  ;; (Even better, don't use this private, undocumented
+  ;; module directly in the first place!!)
+  ;; To further discourage unsafety, `standard-read-request`
+  ;; uses `(make-safety-limits)`.
   [make-read-request
    (->* ()
         (#:connection-close? boolean?
@@ -53,13 +60,14 @@
   ;; `parse-bindings` and `read-headers` were supposed to be private,
   ;; but there are at least some packages that depend on them,
   ;; e.g. https://pkgs.racket-lang.org/package/rfc6455
-  ;; 
+  ;; CAUTION: They effectively use `(make-unlimited-safety-limits)`
+  ;; by default to maximize compatibility,
+  ;; which leaves applications vulnerable as noted above.
   [parse-bindings (-> bytes? (listof binding?))]
   [read-headers (->* (input-port?)
                      (#:safety-limits safety-limits?)
                      (listof header?))]))
 
-;; FIXME add note re unlimited default
 
 (module* internal-test #f
   (provide read-http-line/limited
@@ -72,8 +80,8 @@
 
 ;; **************************************************
 ;; read-request: connection number (input-port -> string string) -> request boolean?
-;; read the request line, and the headers, determine if the connection should
-;; be closed after servicing the request and build a request structure
+;; Read the request line, and the headers, determine if the connection should
+;; be closed after servicing the request, and build a request structure
 (define (make-read-request #:connection-close? [connection-close? #f]
                            #:safety-limits [limits (make-unlimited-safety-limits)])
   
@@ -318,7 +326,9 @@
 ;; **************************************************
 ;; read-headers
 
-; read-headers : iport [safety-limits?] -> (listof header?)
+;; read-headers : iport [safety-limits?] -> (listof header?)
+;; NOTE: This was supposed to be private, but is used by at least some
+;; packages which we don't want to break: see note above, on `provide`.
 (define (read-headers in #:safety-limits [limits (make-unlimited-safety-limits)])
   (read-headers* in
                  #:max-count (safety-limits-max-request-headers limits)
@@ -452,13 +462,15 @@
      (read-data meth (lambda (data)
                        (values bindings-GET data)))]))
 
-;; parse-bindings : bytes? -> (listof binding?)
 
 (define (urldecode bs)
   (string->bytes/utf-8
    (form-urlencoded-decode
     (bytes->string/utf-8 bs))))
 
+;; parse-bindings : bytes? -> (listof binding?)
+;; NOTE: This was supposed to be private, but is used by at least some
+;; packages which we don't want to break: see note above, on `provide`.
 (define (parse-bindings data)
   (call-with-input-bytes data
     (lambda (in)
@@ -558,26 +570,13 @@
 
 
 
-(define MAX-HEADERS/FIELD
-  ;; Maximum number of headers allowed for a  th
-  ;; This is kind of high just to be safe, but I don't think you ever see
-  ;; more than a couple headers (Content-Disposition and Content-Type) per
-  ;; field in practice.
+(define MAX-HEADERS/PART
+  ;; Maximum number of headers allowed for a single multipart/form-data part.
+  ;; This is a constant because multipart/form-data headers are limited by
+  ;; <https://tools.ietf.org/html/rfc7578#section-4.8>;
+  ;; it is high to avoid rejecting any reasonable request.
   20)
 
-; Find the starting position of `needle' within `haystack'.
-(define (bytes-find haystack needle)
-  ;; FIXME regexp-match-positions
-  (define haystack-len (bytes-length haystack))
-  (define needle-len (bytes-length needle))
-  (and (<= needle-len haystack-len)
-       (or (and (bytes=? (subbytes haystack 0 haystack-len) ;FIXME needle-len
-                         needle)
-                0)
-           (for*/first ([pos (in-range (add1 (- haystack-len needle-len)))]
-                        [haystack* (in-value (subbytes haystack pos (+ pos needle-len)))]
-                        #:when (bytes=? haystack* needle))
-             pos))))
 
 (define (read-mime-multipart in boundary #:safety-limits [limits (make-safety-limits)])
   (match-define (safety-limits #:max-form-data-parts max-parts
@@ -586,24 +585,34 @@
                                #:form-data-file-memory-threshold max-file-memory-threshold
                                #:max-form-data-fields max-fields
                                #:max-form-data-field-length max-field-length
-                               #:max-request-header-length max-header-length)
+                               #:max-form-data-header-length max-header-length)
     limits)
   
   (define start-boundary (bytes-append #"--" boundary))
   (define start-boundary-len (bytes-length start-boundary))
+  (define start-boundary-rx (byte-regexp (regexp-quote start-boundary)))
   (define end-boundary (bytes-append start-boundary #"--"))
+  (define end-boundary-len
+    ;; trailing CRLF is handled by `read-http-line/limited`
+    (bytes-length end-boundary))
 
-  (define bufsize (max start-boundary-len (* 64 1024)))
+  (define bufsize (max end-boundary-len (* 64 1024)))
   (define buf (make-bytes bufsize))
 
   (define (find-boundary haystack)
-    (bytes-find haystack start-boundary))
+    (match (regexp-match-positions start-boundary-rx haystack)
+      [(list (cons pos _))
+       pos]
+      [_
+       #f]))
 
   (define (subport in n)
     (make-limited-input-port in n #f))
 
   (define (collect-part-headers)
-    (read-headers* in #:max-count MAX-HEADERS/FIELD #:max-length max-header-length))
+    (read-headers* in
+                   #:max-count MAX-HEADERS/PART
+                   #:max-length max-header-length))
 
   (define (collect-part-content file?)
     (define-values (content-in content-out)
@@ -624,22 +633,30 @@
 
       ;; Read unitl the position before the CRLF that precedes the
       ;; boundary and then skip over the boundary in the input.
+      ;; INVARIANT: The `pos` argument is a result of `find-boundary`.
       (define (copy-until-boundary! len pos)
+        ;; Read the content
         (define pos* (max 0 (- pos 2)))
         (increase-length len pos*)
         (copy-port (subport in pos*) content-out)
-
+        ;; Skip the CRLF
+        (read-http-line/limited in #:limit 0)
+        ;; Read the (possibly final) boundary line.
         (define line
-          (begin
-            ;; Skip the CRLF and then read the boundary line.
-            (read-http-line/limited in #:limit max-field-length) ;; ???? FIXME
-            (read-http-line/limited in #:limit max-field-length))) ;; ???? FIXME
-
+          (read-http-line/limited in #:limit end-boundary-len))
         (when (eof-object? line)
           (network-error 'read-mime-multipart "port closed prematurely"))
-
-        (bytes=? line start-boundary))
-
+        (define more-parts?
+          (cond
+            [(bytes=? line start-boundary)
+             #true]
+            [(bytes=? line end-boundary)
+             #false]
+            [else
+             (network-error 'read-mime-multipart "malformed boundary line")]))
+        more-parts?)
+                          
+      
       (define more-parts?
         (let loop ([len 0]
                    [prev #""])
@@ -695,18 +712,49 @@
           (read-parts parts* total-files total-fields)
           (reverse parts*))))
 
-  (let skip-preamble ()
-    (define line (read-http-line/limited in #:limit max-header-length))
+  (let skip-preamble ([preamble-line-count 0])
+
+    ;; This code permits a "preamble" as defined in
+    ;; <https://tools.ietf.org/html/rfc2046#section-5.1>,
+    ;; which is cited by RFC 7578.
+    ;; However, the `multipart/form-data` definition
+    ;; doesn't explicitly mention a "preamble" and
+    ;; general tries to forbid MIME features it doesn't use,
+    ;; and browsers etc. don't seem to use this.
+    ;; Thus, we use a small limit that hopefully will be enough
+    ;; for any legacy clients out there.
+    
+    (define MAX-PREAMBLE-LINES 20)
+    (unless (< preamble-line-count MAX-PREAMBLE-LINES)
+      (network-error 'read-mime-multipart "too many \"preamble\" lines"))
+
+    (define MAX-PREAMBLE-LINE-LEN
+      ;; This is a guess at a limit that should be long enough for
+      ;; a legacy "preamble": it is the limit on message body lines from RFC 821,
+      ;; which is cited by (but not incorporated into) RFC 2046.
+      ;; Becauese  RFC 2046 limits boundaries to 70 ASCII characters,
+      ;; this will always be longer than `end-boundary-len`, too.
+      998)
+    (define line
+      (read-http-line/limited in #:limit MAX-PREAMBLE-LINE-LEN))
     (cond
-      [(eof-object? line) (network-error 'read-mime-multipart "port closed prematurely")]
-      [(bytes=? line start-boundary) (read-parts)]
-      [(bytes=? line end-boundary) null]
-      [else (skip-preamble)])))
+      [(eof-object? line)
+       (network-error 'read-mime-multipart "port closed prematurely")]
+      [(bytes=? line start-boundary)
+       (read-parts)]
+      [(bytes=? line end-boundary)
+       null]
+      [else
+       (skip-preamble (add1 preamble-line-count))])))
+
+
 
 (define (file-part? headers)
   (match (headers-assq* #"Content-Disposition" headers)
     [(header _ (regexp #rx"filename=")) #t]
     [_ #f]))
+
+
 
 (define (delete-file/safe p)
   (with-handlers ([exn:fail:filesystem? void])

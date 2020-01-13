@@ -41,7 +41,7 @@
                               make-safety-limits/c))
    #:with (accessor ...)
    (for/list ([id (in-list (syntax->list #'(field ...)))])
-     (format-id id "~a-~a" #'safety-limits id #|#:subs? #t|#))
+     (format-id id "~a-~a" #'safety-limits id #:subs? #t))
    #'(begin
        (struct safety-limits (field ...)
          #:name -safety-limits
@@ -77,6 +77,7 @@
   max-form-data-file-length nonnegative-length/c (* 10 1024 1024)
   form-data-file-memory-threshold nonnegative-length/c (* 1 1024 1024)
   max-form-data-parts nonnegative-length/c (+ max-form-data-fields max-form-data-files)
+  max-form-data-header-length nonnegative-length/c (* 8 1024)
   response-timeout timeout/c 60
   response-send-timeout timeout/c 60)
 

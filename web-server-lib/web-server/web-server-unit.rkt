@@ -59,7 +59,7 @@
   ;; host-info->dispatcher : host-info -> conn request -> void
   (define (host-info->dispatcher host-info)
     (sequencer:make
-     (timeout:make (safety-limits-initial-connection-timeout safety-limits))
+     (timeout:make (safety-limits-request-read-timeout safety-limits)) ;; ????
      (if (and (host-log-format host-info)
               (host-log-path host-info))
          (log:make #:format (log:log-format->format (host-log-format host-info))

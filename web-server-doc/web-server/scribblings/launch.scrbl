@@ -36,11 +36,11 @@ This module provides functions for launching dispatching servers.
                 [#:port port listen-port-number? 80]
                 [#:listen-ip listen-ip (or/c string? #f) #f]
                 [#:max-waiting max-waiting exact-nonnegative-integer? 511]
-                [#:initial-connection-timeout initial-connection-timeout timeout/c 60]
+                [#:initial-connection-timeout request-read-timeout timeout/c 60]
                 [#:safety-limits safety-limits safety-limits?
                  (make-safety-limits
                   #:max-waiting max-waiting
-                  #:initial-connection-timeout initial-connection-timeout)])
+                  #:request-read-timeout request-read-timeout)])
          (-> any)]{
 
   Constructs an appropriate @racket[dispatch-server-config*^], invokes the
@@ -67,13 +67,13 @@ This module provides functions for launching dispatching servers.
   as the @sigelem[dispatch-server-config*^ safety-limits] value and is also used
   by the @sigelem[dispatch-server-config*^ read-request] implementation.
 
-  The @racket[max-waiting] and @racket[initial-connection-timeout] arguments
+  The @racket[max-waiting] and @racket[request-read-timeout] arguments
   are supported for backwards compatability.
   If a @racket[safety-limits] argument is given, the @racket[max-waiting] and
-  @racket[initial-connection-timeout] arguments are ignored;
+  @racket[request-read-timeout] arguments are ignored;
   otherwise, they are passed to @racket[make-safety-limits] to construct
   the @tech{safety limits} value.
-  If neither @racket[max-waiting], @racket[initial-connection-timeout],
+  If neither @racket[max-waiting], @racket[request-read-timeout],
   nor @racket[safety-limits] are given, the default @tech{safety limits} value
   is equivalent to @racket[(make-safety-limits)].
 
@@ -97,7 +97,7 @@ from a given path:
               to use @racket[dispatch-server-config*^] instead of @racket[dispatch-server-config^]:
               see @elemref["safety-limits-porting"]{compatability note}.
               Corrected documented contracts for the @racket[max-waiting] and
-              @racket[initial-connection-timeout] arguments.}]}
+              @racket[request-read-timeout] arguments.}]}
 
 
 @defproc[(serve/ports [#:dispatch dispatch dispatcher/c]
@@ -114,11 +114,11 @@ from a given path:
                       [#:ports ports (listof listen-port-number?) (list 80)]
                       [#:listen-ip listen-ip (or/c string? #f) #f]
                       [#:max-waiting max-waiting exact-nonnegative-integer? 511]
-                      [#:initial-connection-timeout initial-connection-timeout timeout/c 60]
+                      [#:initial-connection-timeout request-read-timeout timeout/c 60]
                       [#:safety-limits safety-limits safety-limits?
                        (make-safety-limits
                         #:max-waiting max-waiting
-                        #:initial-connection-timeout initial-connection-timeout)])
+                        #:request-read-timeout request-read-timeout)])
          (-> any)]{
  Calls @racket[serve] multiple times, once for each @racket[port], and returns
  a function that shuts down all of the server instances.
@@ -141,11 +141,11 @@ from a given path:
                           [#:tcp@ tcp@ (unit/c (import) (export tcp^)) raw:tcp@]
                           [#:ips+ports ips+ports (listof (cons/c (or/c string? #f) (listof listen-port-number?))) (list (cons #f (list 80)))]
                           [#:max-waiting max-waiting exact-nonnegative-integer? 511]
-                          [#:initial-connection-timeout initial-connection-timeout timeout/c 60]
+                          [#:initial-connection-timeout request-read-timeout timeout/c 60]
                           [#:safety-limits safety-limits safety-limits?
                            (make-safety-limits
                             #:max-waiting max-waiting
-                            #:initial-connection-timeout initial-connection-timeout)])
+                            #:request-read-timeout request-read-timeout)])
          (-> any)]{
  Calls @racket[serve/ports] multiple times, once for each @racket[ip], and returns
  a function that shuts down all of the server instances.
@@ -198,7 +198,7 @@ Constructs an implementation of the dispatch server's connection-conversion abst
 
 @defproc[(do-not-return) none/c]{
  This function does not return. If you are writing a script to load the @web-server
- you are likely to want to call this functions at the end of your script.
+ you may want to call this functions at the end of your script.
 }
 
 }

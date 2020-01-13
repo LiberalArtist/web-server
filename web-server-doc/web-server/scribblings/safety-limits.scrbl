@@ -33,6 +33,8 @@
               (code:line (* 1 1024 1024) (code:comment #,(elem "1 MiB")))]
              [#:max-form-data-parts max-form-data-parts nonnegative-length/c
               (+ max-form-data-fields max-form-data-files)]
+             [#:max-form-data-header-length max-form-data-header-length nonnegative-length/c
+              (code:line (* 8 1024) (code:comment #,(elem "8 KiB")))]
              [#:max-form-data-files max-form-data-files nonnegative-length/c 100]
              [#:max-form-data-file-length max-form-data-file-length nonnegative-length/c
               (code:line (* 10 1024 1024) (code:comment #,(elem "10 MiB")))]
@@ -85,27 +87,39 @@
    @sigelem[dispatch-server-config*^ read-request]
    implementation (e.g. from @racket[serve] or @racket[web-server@]).
    }
- @item{The @racket[max-request-body-length] limits the size, in byetes,
+ @item{The @racket[max-request-body-length] limits the size, in bytes,
    of HTTP request bodies---but it does not apply to multipart (file upload)
-   requests: see @racket[max-request-files] and @racket[max-request-file-length], below.
+   requests: see @racket[max-form-data-files] and related limits, below.
    Requests with bodies longer than @racket[max-request-body-length]
    are rejected by the standard @sigelem[dispatch-server-config*^ read-request]
    implementation (e.g. from @racket[serve] or @racket[web-server@]).
    }
- @item{The @racket[max-request-files], @racket[max-request-file-length],
-   and @racket[request-file-memory-threshold] arguments control the handling of
-   multipart (file upload) requests by the standard
+ @item{The @racket[max-form-data-files], @racket[max-form-data-fields],
+   @racket[max-form-data-file-length], @racket[max-form-data-field-length],
+   @racket[max-form-data-parts], @racket[form-data-file-memory-threshold],
+   and @racket[max-form-data-header-length] arguments control the handling of
+   @tt{multipart/form-data} (file upload) requests by the standard
    @sigelem[dispatch-server-config*^ read-request]
    implementation (e.g. from @racket[serve] or @racket[web-server@]).
    
-   The number of files per request is limited by @racket[max-request-files],
-   and @racket[max-request-file-length] limits the length, in bytes,
-   of each field in a multipart request (i.e. the maximum size of an individual file).
+   The number of files and non-file ``fields'' per request are limited by
+   @racket[max-form-data-files] and @racket[max-form-data-fields], respectively,
+   and @racket[max-form-data-file-length] and @racket[max-form-data-field-length]
+   limit the length, in bytes, of an individual file or non-file field.
+   Additionally, the total number of ``parts,'' which includes both files and fields,
+   must not exceed @racket[max-form-data-parts].
    Requests that exceed these limits are rejected.
-
+   
    Files longer than @racket[request-file-memory-threshold], in bytes,
    are automatically offloaded to disk as temporary files
    to avoid running out of memory.
+
+   The @racket[max-form-data-header-length] argument limits the length of a header
+   for an individual part (file or field).
+   Since such headers are already tightly constrained by
+   @hyperlink["https://tools.ietf.org/html/rfc7578#section-4.8"]{RFC 7578 §4.8.},
+   it should be especially rare to need to increase this limit,
+   but doing so could allow for exceptionally long file or field names.
    }
  @item{The @racket[response-timeout] and @racket[response-send-timeout]
    arguments limit the time for which individual request handlers
@@ -141,14 +155,16 @@
 
  The @tech{safety limits} type was introduced in version 1.6 of the
  @tt{web-server-lib} package.
- Previous versions of this library only supported the @racket[max-waiting] and
- @racket[initial-connection-timeout] limits, which were specified
- through @racket[dispatch-server-config^], @racket[web-config^], and optional
- arguments to functions like @racket[serve].
- If those limits weren't explicitly supplied, the default behavior
- was closest to using
- @racket[(make-unlimited-safety-limits #:initial-connection-timeout 60)]. @; FIXME!!!
- However, version 1.6 adopted @racket[make-safety-limits] as the default,
+ Previous versions of this library only supported the @racket[max-waiting] limit
+ and (in some cases) an @racket[initial-connection-timeout] limit,
+ which was similar to @racket[request-read-timeout], but had
+ @hyperlink["https://github.com/racket/web-server/pull/77"]{some problems}.
+ These limits were specified through @racket[dispatch-server-config^], @racket[web-config^],
+ and optional arguments to functions like @racket[serve]:
+ if values weren't explicitly supplied, the default behavior was closest to using
+ @racket[(make-unlimited-safety-limits #:request-read-timeout 60)].
+ 
+ However, version 1.6 adopted @racket[(make-safety-limits)] as the default,
  as most applications would benefit from using reasonable protections.
  When porting from earlier versions of this library,
  if you think your application may be especially resource-intensive,
@@ -169,6 +185,7 @@
           [#:max-request-file-length max-request-file-length nonnegative-length/c +inf.0]
           [#:request-file-memory-threshold request-file-memory-threshold nonnegative-length/c +inf.0]
           [#:max-form-data-parts max-form-data-parts nonnegative-length/c +inf.0]
+          [#:max-form-data-header-length max-form-data-header-length nonnegative-length/c +inf.0]
           [#:max-form-data-files max-form-data-files nonnegative-length/c +inf.0]
           [#:max-form-data-file-length max-form-data-file-length nonnegative-length/c +inf.0]
           [#:form-data-file-memory-threshold form-data-file-memory-threshold nonnegative-length/c +inf.0]
@@ -183,6 +200,7 @@
  Think carefully before using @racket[make-unlimited-safety-limits],
  as it may leave your application vulnerable to denial of service attacks
  or other threats that the default values from @racket[make-safety-limits] would mitigate.
+ See the @elemref["safety-limits-porting"]{compatability note} for more details.
 
  Note that the default value for @racket[max-waiting] is @racket[511],
  @italic{not} @racket[+inf.0], due to the contract of @racket[tcp-listen].

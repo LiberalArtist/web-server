@@ -116,7 +116,7 @@ ports (e.g., to implement SSL) as used by the dispatch server.
  @racketblock[
  (make-safety-limits
   #:max-waiting #,(sigelem dispatch-server-config^ max-waiting)
-  #:initial-connection-timeout #,(sigelem dispatch-server-config^ initial-connection-timeout))]
+  #:request-read-timeout #,(sigelem dispatch-server-config^ initial-connection-timeout))]
   
  @history[#:changed "1.6"
           @elem{Deprecated in favor of @racket[dispatch-server-config*^].
@@ -126,7 +126,7 @@ ports (e.g., to implement SSL) as used by the dispatch server.
   Passed to @racket[make-safety-limits].
  }
  @defthing[initial-connection-timeout timeout/c]{
-  Passed to @racket[make-safety-limits].
+  Passed to @racket[make-safety-limits]  as its @racket[#:request-read-timeout] argument.
   @history[#:changed "1.6"
            @elem{Loosened contract for consistency with @racket[make-safety-limits].}]
  }

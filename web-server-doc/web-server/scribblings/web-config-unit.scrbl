@@ -53,7 +53,7 @@
   @racketblock[
  (make-safety-limits
   #:max-waiting #,(sigelem web-config^ max-waiting)
-  #:initial-connection-timeout #,(sigelem web-config^ initial-connection-timeout))]
+  #:request-read-timeout #,(sigelem web-config^ initial-connection-timeout))]
   
   @history[#:changed "1.6"
            @elem{Deprecated in favor of @racket[web-config*^].
@@ -63,7 +63,7 @@
  Passed to @racket[make-safety-limits].
 }
 @defthing[initial-connection-timeout timeout/c]{
-  Passed to @racket[make-safety-limits].
+  Passed to @racket[make-safety-limits] as its @racket[#:request-read-timeout] argument.
   @history[#:changed "1.6"
            @elem{Loosened contract for consistency with @racket[make-safety-limits].}]
 }

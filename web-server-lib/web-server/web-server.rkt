@@ -97,7 +97,7 @@
          #:initial-connection-timeout [_timeout 60]
          #:safety-limits [safety-limits (make-safety-limits
                                          #:max-waiting _max-waiting
-                                         #:initial-connection-timeout _timeout)])
+                                         #:request-read-timeout _timeout)])
   (define read-request
     (http:make-read-request
      #:connection-close? connection-close?
@@ -128,7 +128,7 @@
          #:initial-connection-timeout [_timeout 60]
          #:safety-limits [limits (make-safety-limits
                                   #:max-waiting _max-waiting
-                                  #:initial-connection-timeout _timeout)])
+                                  #:request-read-timeout _timeout)])
   (define shutdowns
     (map (lambda (port)
            (serve
@@ -155,7 +155,7 @@
          #:initial-connection-timeout [_timeout 60]
          #:safety-limits [limits (make-safety-limits
                                   #:max-waiting _max-waiting
-                                  #:initial-connection-timeout _timeout)])
+                                  #:request-read-timeout _timeout)])
   (define shutdowns
     (map (match-lambda
            [(list-rest listen-ip ports)
