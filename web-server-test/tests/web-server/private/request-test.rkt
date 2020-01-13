@@ -179,8 +179,7 @@
              (make-check-expected e))
        fail-check)))
   (define actual-parts
-    ;; ??? FIXME read-mime-multipart
-    (read-mime-multipart data boundary))
+    (read-mime-multipart data boundary #:safety-limits (make-safety-limits)))
   (check #:e (length expected-parts) #:a (length actual-parts)
          "wrong number of parts")
   (for ([n (in-naturals)]
@@ -444,7 +443,7 @@
 
      (test-exn:fail:network
       "multipart-body-field-without-data"
-      #rx"port closed prematurely"
+      #rx"malformed part \\(no data\\)"
       (lambda ()
         (read-mime-multipart (fixture/ip "multipart-body-field-without-data") #"abc")))
 
@@ -578,7 +577,15 @@
       #"abc"
       (list
        (mime-part (list (header #"Content-Disposition" #"multipart/form-data; name=\"x\""))
-                  (open-input-bytes #"42"))))))
+                  (open-input-bytes #"42"))))
+
+     (test-exn:fail:network
+      "multipart-body-with-too-long-preamble, preamble too long"
+      #rx"too many \"preamble\" lines"
+      (λ ()
+        (read-mime-multipart (fixture/ip "multipart-body-with-too-long-preamble")
+                             #"abc"
+                             #:safety-limits (make-safety-limits))))))
 
    (test-suite
     "Headers"

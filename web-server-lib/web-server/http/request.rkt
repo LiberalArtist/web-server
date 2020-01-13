@@ -640,12 +640,18 @@
       ;; boundary and then skip over the boundary in the input.
       ;; INVARIANT: The `pos` argument is a result of `find-boundary`.
       (define (copy-until-boundary! len pos)
+        (when (< pos 2)
+          (network-error 'read-mime-multipart "malformed part (no data)"))
         ;; Read the content
-        (define pos* (max 0 (- pos 2)))
+        (define pos* (- pos 2))
         (increase-length len pos*)
         (copy-port (subport in pos*) content-out)
         ;; Skip the CRLF
-        (read-http-line/limited in #:limit 0)
+        (let ([bs (read-bytes 2 in)])
+          (unless (equal? #"\r\n" bs)
+            (network-error 'read-mime-multipart
+                           "malformed part\n  expected: #\"\r\n\" before boundary\n  given: ~e"
+                           bs)))
         ;; Read the (possibly final) boundary line.
         (define line
           (read-http-line/limited in #:limit end-boundary-len))
